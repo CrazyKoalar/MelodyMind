@@ -1,124 +1,122 @@
-# 🎵 MelodyMind
+# MelodyMind
 
-AI-powered music transcription library - Convert audio to sheet music (piano, guitar, and more)
+AI-powered music transcription library for converting monophonic audio into sheet music outputs such as LilyPond, VexFlow HTML, and Jianpu.
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## ✨ Features
+## Features
 
-- 🎹 **Multi-instrument support** - Piano, guitar, and more instruments
-- 🎼 **Dual notation output** - Standard sheet music (五线谱) and Jianpu (简谱)
-- 🤖 **Multiple AI backends** - Basic Pitch (Spotify), pYIN, and extensible architecture
-- 🌐 **Web-ready** - Generate HTML with VexFlow for browser rendering
-- 📄 **Export formats** - PDF, MIDI, LilyPond, and plain text
-- 🚀 **Easy to use** - Simple API for quick transcription
+- Monophonic pitch detection with `librosa` pYIN
+- Dual notation output: standard staff notation and Jianpu
+- Web-ready rendering with VexFlow HTML export
+- Text-based export with LilyPond source generation
+- Extensible architecture for future transcription backends
 
-## 🚀 Quick Start
+## Current Status
 
-### Installation
+The pYIN workflow is implemented today and is the recommended path.
+
+`Basic Pitch` scaffolding exists in the codebase, but the integrated `PitchDetector` backend is still a work in progress and should not yet be considered production-ready.
+
+## Installation
 
 ```bash
-# Basic installation
 pip install -e .
-
-# With Basic Pitch support (recommended)
-pip install -e ".[basic-pitch]"
-
-# Development installation
-pip install -e ".[dev]"
 ```
 
-### Usage
+Optional extras:
+
+```bash
+pip install -e ".[dev]"
+pip install -e ".[basic-pitch]"
+pip install -e ".[crepe]"
+```
+
+If you prefer installing the runtime dependencies without editable package setup, use:
+
+```bash
+pip install -r requirements.txt
+```
+
+## Quick Start
 
 ```python
 from melonymind import AudioProcessor, PitchDetector, SheetGenerator
 from melonymind.core.pitch_detector import DetectionMode
 
-# Load audio
 processor = AudioProcessor()
 audio, sr = processor.load("my_song.wav")
 
-# Detect pitch
 detector = PitchDetector(mode=DetectionMode.PYIN)
 notes = detector.detect(audio, sr)
 
-# Generate sheet music
 generator = SheetGenerator()
 lilypond_code = generator.generate_lilypond(notes)
 
-# Save to file
-with open("output.ly", "w") as f:
+with open("output.ly", "w", encoding="utf-8") as f:
     f.write(lilypond_code)
 ```
 
-### Command Line
+## Command Line
+
+After installation:
 
 ```bash
-python examples/demo.py my_song.wav -o ./output
+melonymind my_song.wav -o ./output
 ```
 
-## 📁 Project Structure
+Without installation:
 
+```bash
+python -m melonymind.cli my_song.wav -o ./output
 ```
+
+## Project Structure
+
+```text
 MelodyMind/
-├── melonymind/           # Main package
-│   ├── core/             # Audio processing & pitch detection
-│   │   ├── audio_processor.py
-│   │   └── pitch_detector.py
-│   ├── notation/         # Sheet music generation
-│   │   ├── sheet_generator.py    # 五线谱
-│   │   └── jianpu_generator.py   # 简谱
-│   └── models/           # AI model wrappers
-│       └── basic_pitch.py
-├── examples/             # Example scripts
-├── tests/                # Unit tests
-├── requirements.txt      # Dependencies
-└── setup.py             # Package setup
+|-- melonymind/
+|   |-- core/
+|   |   |-- audio_processor.py
+|   |   `-- pitch_detector.py
+|   |-- notation/
+|   |   |-- sheet_generator.py
+|   |   `-- jianpu_generator.py
+|   |-- models/
+|   |   `-- basic_pitch.py
+|   `-- cli.py
+|-- examples/
+|   `-- demo.py
+|-- tests/
+|-- requirements.txt
+`-- setup.py
 ```
 
-## 🎼 Supported Notation Formats
+## Supported Outputs
 
 | Format | Description | Status |
 |--------|-------------|--------|
-| **LilyPond** | Text-based music notation | ✅ Ready |
-| **VexFlow** | JavaScript web rendering | ✅ Ready |
-| **Jianpu** | Numbered musical notation (简谱) | ✅ Ready |
-| **MIDI** | Standard MIDI file | ✅ Ready |
-| **PDF** | Printable sheet music | 🔄 Via LilyPond |
-| **MusicXML** | Universal music format | 📋 Planned |
+| LilyPond | Text-based music notation | Ready |
+| VexFlow | JavaScript web rendering | Ready |
+| Jianpu | Numbered musical notation | Ready |
+| PDF | Via LilyPond if installed locally | Partial |
+| MIDI | Planned through transcription backends | In progress |
+| MusicXML | Universal notation format | Planned |
 
-## 🤖 AI Backends
+## Development Notes
 
-| Backend | Description | Installation |
-|---------|-------------|--------------|
-| **pYIN** | Probabilistic YIN (default) | Built-in via librosa |
-| **Basic Pitch** | Spotify's transcription model | `pip install basic-pitch` |
-| **CREPE** | Deep pitch estimation | `pip install crepe` |
+- `examples/demo.py` now delegates to the package CLI entry point.
+- `melonymind.cli` is the canonical command-line interface.
+- The repository currently focuses on a clean monophonic transcription pipeline first.
 
-## 🛣️ Roadmap
+## Roadmap
 
-- [ ] Support for guitar tablature
-- [ ] Multi-track transcription
-- [ ] Real-time transcription
-- [ ] MusicXML export
-- [ ] Web API service
-- [ ] Pre-trained models for specific instruments
+- Improve note segmentation and quantization
+- Finish Basic Pitch integration
+- Add richer export formats such as MusicXML
+- Explore real-time and multi-track workflows
 
-## 🤝 Contributing
+## License
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- [Basic Pitch](https://github.com/spotify/basic-pitch) by Spotify
-- [Librosa](https://librosa.org/) for audio processing
-- [VexFlow](https://vexflow.com/) for web-based notation
-
----
-
-Made with ❤️ by CrazyKoalar
+This project is licensed under the MIT License.

@@ -2,23 +2,34 @@
 Setup script for MelodyMind package.
 """
 
-from setuptools import setup, find_packages
 from pathlib import Path
 
-# Read README
-readme_path = Path(__file__).parent / "README.md"
-long_description = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
+from setuptools import find_packages, setup
 
-# Read requirements
-requirements_path = Path(__file__).parent / "requirements.txt"
-requirements = []
-if requirements_path.exists():
-    with open(requirements_path) as f:
-        requirements = [
-            line.strip() 
-            for line in f 
-            if line.strip() and not line.startswith("#")
-        ]
+
+PROJECT_ROOT = Path(__file__).parent
+README_PATH = PROJECT_ROOT / "README.md"
+long_description = README_PATH.read_text(encoding="utf-8") if README_PATH.exists() else ""
+
+INSTALL_REQUIRES = [
+    "numpy>=1.21.0",
+    "librosa>=0.9.0",
+    "soundfile>=0.11.0",
+    "pretty-midi>=0.2.10",
+    "mido>=1.2.10",
+]
+
+EXTRAS_REQUIRE = {
+    "basic-pitch": ["basic-pitch>=0.2.0"],
+    "crepe": ["crepe>=0.0.14"],
+    "dev": [
+        "pytest>=7.0.0",
+        "pytest-cov>=3.0.0",
+        "black>=22.0.0",
+        "flake8>=4.0.0",
+        "mypy>=0.950",
+    ],
+}
 
 setup(
     name="melonymind",
@@ -44,24 +55,8 @@ setup(
         "Topic :: Multimedia :: Sound/Audio :: MIDI",
     ],
     python_requires=">=3.8",
-    install_requires=[
-        "numpy>=1.21.0",
-        "librosa>=0.9.0",
-        "soundfile>=0.11.0",
-        "pretty-midi>=0.2.10",
-        "mido>=1.2.10",
-    ],
-    extras_require={
-        "basic-pitch": ["basic-pitch>=0.2.0"],
-        "crepe": ["crepe>=0.0.14"],
-        "dev": [
-            "pytest>=7.0.0",
-            "pytest-cov>=3.0.0",
-            "black>=22.0.0",
-            "flake8>=4.0.0",
-            "mypy>=0.950",
-        ],
-    },
+    install_requires=INSTALL_REQUIRES,
+    extras_require=EXTRAS_REQUIRE,
     entry_points={
         "console_scripts": [
             "melonymind=melonymind.cli:main",

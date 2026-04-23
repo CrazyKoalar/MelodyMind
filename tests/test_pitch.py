@@ -3,9 +3,8 @@ Tests for pitch detection module.
 """
 
 import pytest
-import numpy as np
 
-from melonymind.core.pitch_detector import PitchDetector, NoteEvent, DetectionMode
+from melonymind.core.pitch_detector import DetectionMode, NoteEvent, PitchDetector
 
 
 class TestPitchDetector:
@@ -28,6 +27,13 @@ class TestPitchDetector:
         """Test detector can be initialized."""
         detector = PitchDetector(mode=DetectionMode.PYIN)
         assert detector.mode == DetectionMode.PYIN
+
+    def test_detect_raises_for_unimplemented_mode(self):
+        """CREPE mode should clearly report that it is not implemented yet."""
+        detector = PitchDetector(mode=DetectionMode.CREPE)
+
+        with pytest.raises(NotImplementedError):
+            detector.detect(audio=[], sr=22050)
     
     def test_quantize_notes(self):
         """Test note quantization."""
@@ -43,10 +49,12 @@ class TestPitchDetector:
         # Check pitches are rounded
         assert quantized[0].pitch == 60
         assert quantized[1].pitch == 62
-        
-        # Check timings are on grid
-        assert quantized[0].start_time == 0.0
+
+        # Check timings are on the 16th-note grid at 120 BPM (0.125 seconds)
+        assert quantized[0].start_time == 0.125
         assert quantized[0].end_time == 1.0
+        assert quantized[1].start_time == 1.0
+        assert quantized[1].end_time == 1.875
 
 
 class TestNoteEvent:
