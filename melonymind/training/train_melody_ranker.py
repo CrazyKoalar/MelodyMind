@@ -6,6 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from ..learned_model import create_melody_ranker_artifact
 from .melody_ranker_trainer import MelodyRankerTrainer, write_training_summary
 
 
@@ -67,7 +68,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     metrics = trainer.evaluate(model, dataset)
 
-    model.save(output_path)
+    artifact = create_melody_ranker_artifact(
+        model,
+        metadata={
+            "sample_count": metrics["sample_count"],
+            "candidate_rows": metrics["candidate_rows"],
+            "trainer": "melody_ranker_trainer",
+        },
+    )
+    artifact.save(output_path)
     write_training_summary(summary_path, metrics)
 
     print(f"Trained melody ranker on {metrics['sample_count']} songs")

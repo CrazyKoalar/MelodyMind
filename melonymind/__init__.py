@@ -12,6 +12,7 @@ from .core.audio_processor import AudioProcessor
 from .core.arranger import PianoArranger
 from .core.midi_exporter import MidiExporter
 from .core.pitch_detector import PitchDetector
+from .learned_model import load_melody_ranker_model
 from .notation.sheet_generator import SheetGenerator
 from .notation.jianpu_generator import JianpuGenerator
 
@@ -20,6 +21,7 @@ __all__ = [
     "MidiExporter",
     "PianoArranger",
     "PitchDetector", 
+    "load_melody_ranker_model",
     "SheetGenerator",
     "JianpuGenerator",
 ]

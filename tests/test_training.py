@@ -2,12 +2,8 @@
 
 import json
 
-import numpy as np
-
-from melonymind.models.melody_ranker import (
-    MelodyCandidateFeatures,
-    TrainableMelodyStemRanker,
-)
+from melonymind.learned_model import create_melody_ranker_artifact, load_melody_ranker_model
+from melonymind.models.melody_ranker import MelodyCandidateFeatures, TrainableMelodyStemRanker
 from melonymind.training.melody_ranker_trainer import (
     MelodyRankingDataset,
     MelodyRankerTrainer,
@@ -25,8 +21,9 @@ def test_trainable_ranker_can_save_and_load(local_tmp_path):
     )
     model_path = local_tmp_path / "ranker.json"
 
-    model.save(model_path)
-    loaded = TrainableMelodyStemRanker.load(model_path)
+    artifact = create_melody_ranker_artifact(model, metadata={"trainer": "test"})
+    artifact.save(model_path)
+    loaded = load_melody_ranker_model(model_path)
 
     scores = loaded.score_candidates(
         [
@@ -36,6 +33,8 @@ def test_trainable_ranker_can_save_and_load(local_tmp_path):
     )
 
     assert model_path.exists()
+    payload = json.loads(model_path.read_text(encoding="utf-8"))
+    assert payload["task"] == "melody_stem_ranking"
     assert scores["vocals"] > scores["mix"]
 
 

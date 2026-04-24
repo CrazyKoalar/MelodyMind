@@ -16,8 +16,8 @@ from . import (
     PitchDetector,
     SheetGenerator,
 )
-from .models import TrainableMelodyStemRanker
 from .core.pitch_detector import DetectionMode
+from .learned_model import load_melody_ranker_model
 from .notation.sheet_generator import SheetMusicConfig
 
 
@@ -43,7 +43,7 @@ def transcribe_audio(
 
     print("Loading audio...")
     melody_ranker = (
-        TrainableMelodyStemRanker.load(melody_ranker_model)
+        load_melody_ranker_model(melody_ranker_model)
         if melody_ranker_model
         else None
     )

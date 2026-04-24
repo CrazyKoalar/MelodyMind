@@ -91,6 +91,8 @@ Use a trained melody-ranker model during transcription:
 melonymind my_song.wav -o ./output --melody-ranker-model ./output/melody_ranker.json
 ```
 
+`--melody-ranker-model` now loads a local learned-model artifact file. The loader also remains compatible with the older plain-weight JSON format.
+
 Without installing the console script:
 
 ```bash
@@ -188,7 +190,7 @@ melonymind-train-melody-ranker ./output/melody_manifest.jsonl -o ./output/melody
 
 Outputs:
 
-- `melody_ranker.json`: trained weights
+- `melody_ranker.json`: trained local learned-model artifact
 - `melody_ranker_metrics.json`: training metrics
 
 ### Step 5: Use The Trained Model

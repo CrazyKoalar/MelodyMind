@@ -130,6 +130,33 @@ def test_main_delegates_to_transcribe_audio(local_tmp_path, monkeypatch):
     assert calls["melody_ranker_model"] == "model.json"
 
 
+def test_transcribe_audio_loads_ranker_via_learned_model(local_tmp_path, monkeypatch):
+    audio_path = local_tmp_path / "demo.wav"
+    audio_path.write_text("placeholder", encoding="utf-8")
+    output_dir = local_tmp_path / "generated"
+    loaded = {}
+
+    monkeypatch.setattr(cli, "AudioProcessor", DummyAudioProcessor)
+    monkeypatch.setattr(cli, "PitchDetector", DummyPitchDetector)
+    monkeypatch.setattr(cli, "PianoArranger", DummyPianoArranger)
+    monkeypatch.setattr(cli, "MidiExporter", DummyMidiExporter)
+
+    def fake_load_model(model_path: str):
+        loaded["model_path"] = model_path
+        return {"kind": "loaded-ranker"}
+
+    monkeypatch.setattr(cli, "load_melody_ranker_model", fake_load_model)
+
+    exit_code = cli.transcribe_audio(
+        str(audio_path),
+        str(output_dir),
+        melody_ranker_model="trained-ranker.json",
+    )
+
+    assert exit_code == 0
+    assert loaded["model_path"] == "trained-ranker.json"
+
+
 def test_transcribe_audio_writes_expected_output_files(local_tmp_path, monkeypatch):
     """Transcription flow should generate the expected notation artifacts."""
     audio_path = local_tmp_path / "demo.wav"
