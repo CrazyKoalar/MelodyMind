@@ -9,12 +9,16 @@ __author__ = "CrazyKoalar"
 __email__ = ""
 
 from .core.audio_processor import AudioProcessor
+from .core.arranger import PianoArranger
+from .core.midi_exporter import MidiExporter
 from .core.pitch_detector import PitchDetector
 from .notation.sheet_generator import SheetGenerator
 from .notation.jianpu_generator import JianpuGenerator
 
 __all__ = [
     "AudioProcessor",
+    "MidiExporter",
+    "PianoArranger",
     "PitchDetector", 
     "SheetGenerator",
     "JianpuGenerator",

@@ -3,6 +3,7 @@ Tests for notation generators.
 """
 
 from melonymind.core.pitch_detector import NoteEvent
+from melonymind.core.arranger import PianoArrangement
 from melonymind.notation.jianpu_generator import JianpuGenerator
 from melonymind.notation.sheet_generator import SheetGenerator, SheetMusicConfig
 
@@ -47,6 +48,27 @@ def test_generate_vexflow_contains_expected_note_keys():
     assert 'keys: ["c/1"]' in result
     assert 'keys: ["e/1"]' in result
     assert 'duration: "q"' in result
+
+
+def test_generate_piano_lilypond_contains_two_staves():
+    """Piano export should render melody and accompaniment into a PianoStaff."""
+    generator = SheetGenerator(SheetMusicConfig(title="Piano Test", tempo=120, key="C major"))
+    arrangement = PianoArrangement(
+        melody=sample_notes(),
+        accompaniment=[
+            NoteEvent(pitch=48.0, start_time=0.0, end_time=1.0, confidence=0.7),
+            NoteEvent(pitch=60.0, start_time=0.0, end_time=1.0, confidence=0.7),
+            NoteEvent(pitch=64.0, start_time=0.0, end_time=1.0, confidence=0.7),
+        ],
+        chords=[],
+    )
+
+    result = generator.generate_piano_lilypond(arrangement)
+
+    assert "\\new PianoStaff" in result
+    assert "\\clef treble" in result
+    assert "\\clef bass" in result
+    assert 'title = "Piano Test"' in result
 
 
 def test_export_pdf_falls_back_to_lilypond_source(local_tmp_path, monkeypatch):

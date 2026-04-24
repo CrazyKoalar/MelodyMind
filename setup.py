@@ -60,6 +60,8 @@ setup(
     entry_points={
         "console_scripts": [
             "melonymind=melonymind.cli:main",
+            "melonymind-prepare-melody-data=melonymind.training.prepare_melody_ranker_data:main",
+            "melonymind-train-melody-ranker=melonymind.training.train_melody_ranker:main",
         ],
     },
 )
