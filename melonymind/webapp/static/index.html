@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MelodyMind Annotation</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>MelodyMind Annotation</h1>
+    <nav id="nav">
+      <a href="#/" id="nav-list">Songs</a>
+      <span id="nav-context"></span>
+    </nav>
+    <div class="topbar-actions">
+      <button id="btn-export" type="button" title="Export training manifest from confirmed songs">Export manifest</button>
+    </div>
+  </header>
+
+  <main id="view"></main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <template id="tpl-song-list">
+    <section class="song-list">
+      <div class="upload-card" id="upload-card">
+        <label class="upload-label" for="file-upload">Upload audio</label>
+        <input type="file" id="file-upload" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*" hidden>
+        <p class="muted upload-hint">WAV, MP3, FLAC, OGG, M4A — saved to dataset/uploads</p>
+        <label class="upload-row">
+          <input type="checkbox" id="auto-compute" checked>
+          <span>Run recognition after upload (stems + pitch, may take 30–60s)</span>
+        </label>
+        <p id="upload-status" class="muted" hidden></p>
+      </div>
+      <div class="toolbar">
+        <input id="filter" type="search" placeholder="Filter by filename…">
+        <span class="counts" id="counts"></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Status</th>
+            <th>Picked stem</th>
+            <th>Duration</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </section>
+  </template>
+
+  <template id="tpl-stem-picker">
+    <section class="stem-picker">
+      <div class="picker-header">
+        <h2 id="sp-title"></h2>
+        <div id="sp-prep" class="prep-block" hidden>
+          <button id="sp-prepare" type="button">Prepare stems (first time, ~30s)</button>
+          <span id="sp-prep-msg" class="muted"></span>
+        </div>
+      </div>
+
+      <ol id="sp-list" class="stem-list"></ol>
+
+      <div class="picker-actions">
+        <button id="sp-confirm" type="button" disabled>Confirm and continue</button>
+        <button id="sp-edit-notes" type="button" disabled>Edit melody notes →</button>
+        <button id="sp-reopen" type="button" hidden>Reopen for editing</button>
+      </div>
+    </section>
+  </template>
+
+  <template id="tpl-stem-row">
+    <li class="stem-row" data-stem="">
+      <button class="stem-pick" type="button">Pick</button>
+      <span class="stem-name"></span>
+      <span class="stem-score muted"></span>
+      <audio controls preload="metadata"></audio>
+    </li>
+  </template>
+
+  <template id="tpl-note-editor">
+    <section class="note-editor">
+      <div class="editor-header">
+        <h2 id="ne-title"></h2>
+        <div class="editor-controls">
+          <button id="ne-play" type="button">▶ Play</button>
+          <button id="ne-stop" type="button">■ Stop</button>
+          <span id="ne-time" class="muted">0.00 / 0.00 s</span>
+          <span id="ne-status" class="muted"></span>
+          <button id="ne-save" type="button" title="Force save">Save now</button>
+          <button id="ne-reextract" type="button" title="Re-run pYIN on this stem">Re-extract</button>
+          <span class="editor-sep" aria-hidden="true"></span>
+          <button id="ne-sheet-ly" type="button" title="Download LilyPond source">Download .ly</button>
+          <button id="ne-sheet-html" type="button" title="Open VexFlow preview in a new tab">Sheet preview</button>
+        </div>
+      </div>
+
+      <div class="piano-roll" id="piano-roll">
+        <canvas id="pr-bg"></canvas>
+        <canvas id="pr-notes"></canvas>
+        <canvas id="pr-overlay"></canvas>
+      </div>
+
+      <p class="hint muted">
+        Click empty cell to add a note · drag note body to move · drag edges to resize ·
+        Delete to remove selected · ctrl+wheel = zoom time · shift+wheel = zoom pitch ·
+        middle-drag = pan · Alt disables time snap · click time ruler to seek · Space to play
+      </p>
+    </section>
+  </template>
+
+  <script src="/static/js/app.js" type="module"></script>
+</body>
+</html>

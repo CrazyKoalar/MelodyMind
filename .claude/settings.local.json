@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/test_notation.py -q)",
+      "Bash(python -c \"import fastapi; print\\(fastapi.__version__\\)\")",
+      "Bash(pip install *)",
+      "Bash(python -m pytest tests/test_webapp_scaffold.py -v)",
+      "Bash(python -m pytest tests/test_webapp_state.py -v)",
+      "Bash(python -m pytest tests/test_webapp_pipeline.py -v)",
+      "Bash(python -m pytest tests/test_webapp_routes.py -v)",
+      "Bash(python -m pytest tests/test_webapp_manifest.py -v)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(python -c ' *)",
+      "Bash(python -m pytest tests/)",
+      "Bash(melonymind-webapp --help)",
+      "Bash(rm -rf .test_tmp/final_smoke)",
+      "Bash(melonymind-webapp --dataset examples --state .test_tmp/final_smoke --port 7861)",
+      "Bash(curl -s http://127.0.0.1:7861/api/health)",
+      "Bash(curl -s http://127.0.0.1:7861/api/songs)",
+      "Bash(python -c \"import sys, json; d = json.load\\(sys.stdin\\); print\\(f'songs: {len\\(d[\\\\\"songs\\\\\"]\\)}'\\); [print\\(f'  - {s[\\\\\"filename\\\\\"]} status={s[\\\\\"status\\\\\"]} id={s[\\\\\"id\\\\\"]}'\\) for s in d['songs']]\")",
+      "Bash(curl -s -I http://127.0.0.1:7861/)",
+      "Bash(curl -s http://127.0.0.1:7861/static/js/app.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{size_download}\\\\n\" http://127.0.0.1:7861/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{size_download}\\\\n\" http://127.0.0.1:7861/static/css/app.css)"
+    ]
+  }
+}

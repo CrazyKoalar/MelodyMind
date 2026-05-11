@@ -7,7 +7,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Protocol
 
-import librosa
 import numpy as np
 
 from ..core.pitch_detector import NoteEvent
@@ -88,10 +87,12 @@ class MelodyFeatureExtractor:
         self, stem_name: str, audio: np.ndarray, sr: int, notes: List[NoteEvent]
     ) -> MelodyCandidateFeatures:
         if len(audio):
-            rms_energy = float(librosa.feature.rms(y=audio).mean())
-            zero_crossing_rate = float(librosa.feature.zero_crossing_rate(y=audio).mean())
+            rms_energy = float(np.sqrt(np.mean(np.square(audio))))
+            zero_crossing_rate = float(np.mean(np.abs(np.diff(np.signbit(audio)))))
+            spectrum = np.abs(np.fft.rfft(audio))
+            freqs = np.fft.rfftfreq(len(audio), d=1.0 / sr)
             spectral_centroid_mean = float(
-                librosa.feature.spectral_centroid(y=audio, sr=sr).mean()
+                np.sum(freqs * spectrum) / (np.sum(spectrum) + 1e-8)
             )
         else:
             rms_energy = 0.0

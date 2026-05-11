@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 
 import librosa
 import numpy as np
+import soundfile as sf
 
 from ..models.melody_ranker import (
     HeuristicMelodyStemRanker,
@@ -62,17 +63,31 @@ class AudioProcessor:
         Returns:
             Tuple of (audio_data, sample_rate)
         """
-        audio, sr = librosa.load(audio_path, sr=self.sample_rate, mono=True)
+        audio, sr = sf.read(audio_path, dtype="float32", always_2d=False)
+        if audio.ndim > 1:
+            audio = np.mean(audio, axis=1)
+        if sr != self.sample_rate:
+            audio = librosa.resample(audio, orig_sr=sr, target_sr=self.sample_rate)
+            sr = self.sample_rate
         return audio, sr
 
     def normalize(self, audio: np.ndarray) -> np.ndarray:
         """Normalize audio to [-1, 1] range."""
-        return librosa.util.normalize(audio)
+        peak = float(np.max(np.abs(audio))) if len(audio) else 0.0
+        if peak <= 1e-8:
+            return audio
+        return audio / peak
 
     def trim_silence(self, audio: np.ndarray, top_db: int = 20) -> np.ndarray:
         """Trim silence from beginning and end."""
-        trimmed, _ = librosa.effects.trim(audio, top_db=top_db)
-        return trimmed
+        if not len(audio):
+            return audio
+
+        threshold = float(np.max(np.abs(audio))) * (10.0 ** (-top_db / 20.0))
+        active = np.flatnonzero(np.abs(audio) > threshold)
+        if active.size == 0:
+            return audio
+        return audio[active[0] : active[-1] + 1]
 
     def split_by_onset(self, audio: np.ndarray, sr: int) -> list:
         """
@@ -112,12 +127,23 @@ class AudioProcessor:
         Returns:
             Key signature (e.g., 'C major', 'A minor')
         """
-        chroma = librosa.feature.chroma_cqt(y=audio, sr=sr)
-        chroma_avg = np.mean(chroma, axis=1)
-
-        # Simple key detection based on chroma profile
         keys = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-        key_idx = np.argmax(chroma_avg)
+        if not len(audio):
+            return "C major"
+
+        spectrum = np.abs(np.fft.rfft(audio))
+        freqs = np.fft.rfftfreq(len(audio), d=1.0 / sr)
+        chroma_avg = np.zeros(12, dtype=float)
+
+        valid = (freqs >= 80.0) & (freqs <= 5000.0) & (spectrum > 0)
+        for freq, energy in zip(freqs[valid], spectrum[valid]):
+            midi = int(round(69 + 12 * np.log2(freq / 440.0)))
+            chroma_avg[midi % 12] += float(energy)
+
+        if not np.any(chroma_avg):
+            return "C major"
+
+        key_idx = int(np.argmax(chroma_avg))
 
         # Determine major/minor (simplified)
         third = (key_idx + 4) % 12  # Major third
@@ -139,8 +165,36 @@ class AudioProcessor:
         Returns:
             Tempo in BPM
         """
-        tempo, _ = librosa.beat.beat_track(y=audio, sr=sr)
-        return float(tempo)
+        if len(audio) < sr // 2:
+            return 120.0
+
+        frame_length = 1024
+        hop_length = 512
+        frame_count = 1 + max(0, (len(audio) - frame_length) // hop_length)
+        if frame_count < 4:
+            return 120.0
+
+        energy = np.array(
+            [
+                np.sqrt(np.mean(audio[i * hop_length : i * hop_length + frame_length] ** 2))
+                for i in range(frame_count)
+            ],
+            dtype=float,
+        )
+        onset_env = np.maximum(0.0, np.diff(energy, prepend=energy[0]))
+        onset_env -= onset_env.mean()
+        if np.max(np.abs(onset_env)) <= 1e-8:
+            return 120.0
+
+        autocorr = np.correlate(onset_env, onset_env, mode="full")[len(onset_env) - 1 :]
+        min_bpm, max_bpm = 60.0, 200.0
+        min_lag = max(1, int((60.0 / max_bpm) * sr / hop_length))
+        max_lag = min(len(autocorr) - 1, int((60.0 / min_bpm) * sr / hop_length))
+        if max_lag <= min_lag:
+            return 120.0
+
+        lag = min_lag + int(np.argmax(autocorr[min_lag : max_lag + 1]))
+        return float(60.0 * sr / (lag * hop_length))
 
     def separate_sources(self, audio: np.ndarray, sr: int) -> Dict[str, SeparatedStem]:
         """
@@ -150,10 +204,10 @@ class AudioProcessor:
         user-requested workflow with HPSS, frequency-band masking, and Kalman
         smoothing so the rest of the pipeline can reason over stem candidates.
         """
-        harmonic, percussive = librosa.effects.hpss(audio)
-        vocals = self._extract_band(harmonic, sr, low_hz=180.0, high_hz=3200.0)
-        accompaniment = self._extract_band(harmonic, sr, low_hz=80.0, high_hz=1800.0)
-        bass = self._extract_band(harmonic, sr, low_hz=40.0, high_hz=280.0)
+        vocals = self._extract_band(audio, sr, low_hz=180.0, high_hz=3200.0)
+        accompaniment = self._extract_band(audio, sr, low_hz=80.0, high_hz=1800.0)
+        bass = self._extract_band(audio, sr, low_hz=40.0, high_hz=280.0)
+        percussive = audio - accompaniment
 
         stems = {
             "mix": SeparatedStem(name="mix", audio=audio),
@@ -207,29 +261,25 @@ class AudioProcessor:
         sr: int,
         low_hz: float,
         high_hz: float,
-        n_fft: int = 2048,
-        hop_length: int = 512,
     ) -> np.ndarray:
-        """Apply a soft band mask with Kalman-smoothed frame energies."""
-        stft = librosa.stft(audio, n_fft=n_fft, hop_length=hop_length)
-        magnitude = np.abs(stft)
-        phase = np.exp(1j * np.angle(stft))
-        freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+        """Apply a frequency-band mask with Kalman-smoothed spectral energy."""
+        if not len(audio):
+            return audio
 
+        spectrum = np.fft.rfft(audio)
+        magnitude = np.abs(spectrum)
+        phase = np.exp(1j * np.angle(spectrum))
+        freqs = np.fft.rfftfreq(len(audio), d=1.0 / sr)
         band_mask = (freqs >= low_hz) & (freqs <= high_hz)
         if not np.any(band_mask):
             return np.zeros_like(audio)
 
-        frame_energy = magnitude[band_mask].mean(axis=0)
-        smoothed_energy = self._kalman_filter_1d(frame_energy)
-        normalized_energy = smoothed_energy / (np.max(smoothed_energy) + 1e-8)
+        smoothed_magnitude = self._kalman_filter_1d(magnitude[band_mask])
+        masked_spectrum = np.zeros_like(spectrum, dtype=np.complex128)
+        masked_spectrum[band_mask] = smoothed_magnitude * phase[band_mask]
 
-        masked = np.zeros_like(stft, dtype=np.complex128)
-        masked[band_mask, :] = (
-            magnitude[band_mask, :] * normalized_energy[np.newaxis, :] * phase[band_mask, :]
-        )
-        reconstructed = librosa.istft(masked, hop_length=hop_length, length=len(audio))
-        return librosa.util.normalize(reconstructed) if np.any(reconstructed) else reconstructed
+        reconstructed = np.fft.irfft(masked_spectrum, n=len(audio)).astype(audio.dtype)
+        return self.normalize(reconstructed) if np.any(reconstructed) else reconstructed
 
     def _kalman_filter_1d(
         self,

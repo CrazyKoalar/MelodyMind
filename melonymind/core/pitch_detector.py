@@ -113,23 +113,65 @@ class PitchDetector:
         sr: int,
         min_confidence: float
     ) -> List[NoteEvent]:
-        """Detect using pYIN algorithm via librosa."""
-        import librosa
-        
-        f0, voiced_flag, voiced_probs = librosa.pyin(
-            audio, 
-            fmin=librosa.note_to_hz('C2'),
-            fmax=librosa.note_to_hz('C7'),
-            sr=sr
-        )
-        
+        """Detect pitch with a lightweight frame-wise spectral peak tracker."""
+        frame_length = 2048
+        hop_length = 512
+        if len(audio) < frame_length:
+            frame_length = max(256, int(2 ** np.floor(np.log2(max(len(audio), 1)))))
+            hop_length = max(64, frame_length // 4)
+
+        if len(audio) < frame_length:
+            return []
+
+        fmin = 65.406  # C2
+        fmax = 2093.005  # C7
+        freqs = np.fft.rfftfreq(frame_length, d=1.0 / sr)
+        valid = (freqs >= fmin) & (freqs <= fmax)
+
+        f0 = []
+        voiced_flag = []
+        voiced_probs = []
+        times = []
+
+        window = np.hanning(frame_length)
+        frame_count = 1 + max(0, (len(audio) - frame_length) // hop_length)
+        global_peak = 1e-8
+
+        spectra = []
+        for frame_index in range(frame_count):
+            start = frame_index * hop_length
+            frame = audio[start : start + frame_length] * window
+            spectrum = np.abs(np.fft.rfft(frame))
+            spectra.append(spectrum)
+            if np.any(valid):
+                global_peak = max(global_peak, float(np.max(spectrum[valid])))
+
+        for frame_index, spectrum in enumerate(spectra):
+            band = spectrum[valid]
+            time = frame_index * hop_length / sr
+            times.append(time)
+
+            if band.size == 0:
+                f0.append(np.nan)
+                voiced_flag.append(False)
+                voiced_probs.append(0.0)
+                continue
+
+            local_index = int(np.argmax(band))
+            peak = float(band[local_index])
+            confidence = float(np.clip(peak / global_peak, 0.0, 1.0))
+            freq = float(freqs[valid][local_index])
+
+            f0.append(freq)
+            voiced_flag.append(confidence >= min_confidence)
+            voiced_probs.append(confidence)
+
         notes = []
-        times = librosa.times_like(f0, sr=sr)
-        
+
         # Convert continuous pitch to note events
         current_note = None
         note_start = 0
-        
+
         for i, (time, pitch, is_voiced, conf) in enumerate(
             zip(times, f0, voiced_flag, voiced_probs)
         ):
@@ -143,9 +185,9 @@ class PitchDetector:
                     ))
                     current_note = None
                 continue
-            
-            midi_pitch = librosa.hz_to_midi(pitch)
-            
+
+            midi_pitch = 69 + 12 * np.log2(pitch / 440.0)
+
             if current_note is None:
                 current_note = midi_pitch
                 note_start = time
@@ -158,16 +200,16 @@ class PitchDetector:
                 ))
                 current_note = midi_pitch
                 note_start = time
-        
+
         # Close final note
         if current_note is not None and len(times) > 0:
             notes.append(NoteEvent(
                 pitch=current_note,
                 start_time=note_start,
-                end_time=times[-1],
+                end_time=times[-1] + hop_length / sr,
                 confidence=voiced_probs[-1]
             ))
-        
+
         return notes
     
     def quantize_notes(

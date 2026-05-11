@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://unpkg.com/vexflow@3.0.9/releases/vexflow-min.js"></script>
+  <style>
+    body { margin: 20px; font-family: sans-serif; background: #fff; }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    #sheet-music { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>generated_scale &mdash; G major, 96 BPM</h1>
+  <div id="sheet-music"></div>
+  <script>
+    const VF = Vex.Flow;
+    const measures = [
+      [{keys: ["c/4"], duration: "8"}, {keys: ["d/4"], duration: "8"}, {keys: ["e/4"], duration: "8"}, {keys: ["f/4"], duration: "8"}, {keys: ["g/4"], duration: "8"}]
+    ];
+    const measuresPerRow = 4;
+    const measureWidth = 260;
+    const rowHeight = 130;
+    const clefWidth = 60;
+    const leftPad = 10;
+    const topPad = 40;
+    const numBeats = 4;
+    const beatValue = 4;
+    const timeSig = "4/4";
+
+    const totalRows = Math.ceil(measures.length / measuresPerRow);
+    const totalWidth = leftPad * 2 + measuresPerRow * measureWidth + clefWidth;
+    const totalHeight = topPad + totalRows * rowHeight + 40;
+
+    const div = document.getElementById('sheet-music');
+    const renderer = new VF.Renderer(div, VF.Renderer.Backends.SVG);
+    renderer.resize(totalWidth, totalHeight);
+    const context = renderer.getContext();
+
+    measures.forEach((measureNotes, idx) => {
+      const row = Math.floor(idx / measuresPerRow);
+      const col = idx % measuresPerRow;
+      const isFirstInRow = col === 0;
+      const width = isFirstInRow ? measureWidth + clefWidth : measureWidth;
+      const x = leftPad + col * measureWidth + (isFirstInRow ? 0 : clefWidth);
+      const y = topPad + row * rowHeight;
+
+      const stave = new VF.Stave(x, y, width);
+      if (isFirstInRow) {
+        stave.addClef('treble').addTimeSignature(timeSig);
+      }
+      stave.setContext(context).draw();
+
+      if (measureNotes.length === 0) return;
+
+      const vfNotes = measureNotes.map(n =>
+        new VF.StaveNote({clef: 'treble', keys: n.keys, duration: n.duration})
+      );
+      const voice = new VF.Voice({num_beats: numBeats, beat_value: beatValue}).setStrict(false);
+      voice.addTickables(vfNotes);
+      new VF.Formatter()
+        .joinVoices([voice])
+        .format([voice], width - (isFirstInRow ? clefWidth + 20 : 20));
+      voice.draw(context, stave);
+    });
+  </script>
+</body>
+</html>

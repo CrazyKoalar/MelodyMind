@@ -6,3 +6,5 @@ librosa>=0.9.0
 soundfile>=0.11.0
 pretty-midi>=0.2.10
 mido>=1.2.10
+fastapi>=0.110
+uvicorn[standard]>=0.27

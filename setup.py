@@ -17,6 +17,9 @@ INSTALL_REQUIRES = [
     "soundfile>=0.11.0",
     "pretty-midi>=0.2.10",
     "mido>=1.2.10",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "python-multipart>=0.0.9",
 ]
 
 EXTRAS_REQUIRE = {
@@ -62,6 +65,7 @@ setup(
             "melonymind=melonymind.cli:main",
             "melonymind-prepare-melody-data=melonymind.training.prepare_melody_ranker_data:main",
             "melonymind-train-melody-ranker=melonymind.training.train_melody_ranker:main",
+            "melonymind-webapp=melonymind.webapp.cli:main",
         ],
     },
 )

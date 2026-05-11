@@ -45,8 +45,8 @@ def test_generate_vexflow_contains_expected_note_keys():
     result = generator.generate_vexflow(sample_notes())
 
     assert "<!DOCTYPE html>" in result
-    assert 'keys: ["c/1"]' in result
-    assert 'keys: ["e/1"]' in result
+    assert 'keys: ["c/4"]' in result
+    assert 'keys: ["e/4"]' in result
     assert 'duration: "q"' in result
 
 

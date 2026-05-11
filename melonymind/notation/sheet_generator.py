@@ -61,41 +61,105 @@ class SheetGenerator:
 '''
 
     def generate_vexflow(self, notes: List[NoteEvent]) -> str:
-        vex_notes = []
+        ts_parts = self.config.time_signature.split("/")
+        beats_per_measure = int(ts_parts[0])
+        beat_value = int(ts_parts[1])
+        ticks_per_measure = beats_per_measure * (32 // beat_value)
+
+        duration_ticks = {"w": 32, "h": 16, "q": 8, "8": 4, "16": 2, "32": 1}
+
+        measures: List[List[dict]] = [[]]
+        remaining = ticks_per_measure
         for note in notes:
             key = self._midi_to_vexflow_key(note.pitch)
             duration = self._seconds_to_vexflow_duration(note.duration, self.config.tempo)
-            vex_notes.append(
-                f'  new VF.StaveNote({{clef: "treble", keys: ["{key}"], duration: "{duration}"}})'
+            ticks = duration_ticks.get(duration, 1)
+            if ticks > remaining and measures[-1]:
+                measures.append([])
+                remaining = ticks_per_measure
+            measures[-1].append({"key": key, "duration": duration})
+            remaining -= ticks
+
+        measure_lines = []
+        for measure in measures:
+            items = ", ".join(
+                f'{{keys: ["{n["key"]}"], duration: "{n["duration"]}"}}'
+                for n in measure
             )
+            measure_lines.append(f"      [{items}]")
+        measures_js = ",\n".join(measure_lines) if measure_lines else "      []"
+
+        measures_per_row = 4
+        measure_width = 260
+        row_height = 130
+        clef_width = 60
+        left_pad = 10
+        top_pad = 40
 
         html = f'''<!DOCTYPE html>
 <html>
 <head>
-  <script src="https://unpkg.com/vexflow/releases/vexflow-min.js"></script>
+  <meta charset="utf-8" />
+  <script src="https://unpkg.com/vexflow@3.0.9/releases/vexflow-min.js"></script>
+  <style>
+    body {{ margin: 20px; font-family: sans-serif; background: #fff; }}
+    h1 {{ font-size: 18px; margin: 0 0 12px; }}
+    #sheet-music {{ overflow-x: auto; }}
+  </style>
 </head>
 <body>
+  <h1>{self.config.title} &mdash; {self.config.key}, {self.config.tempo} BPM</h1>
   <div id="sheet-music"></div>
   <script>
     const VF = Vex.Flow;
+    const measures = [
+{measures_js}
+    ];
+    const measuresPerRow = {measures_per_row};
+    const measureWidth = {measure_width};
+    const rowHeight = {row_height};
+    const clefWidth = {clef_width};
+    const leftPad = {left_pad};
+    const topPad = {top_pad};
+    const numBeats = {beats_per_measure};
+    const beatValue = {beat_value};
+    const timeSig = "{self.config.time_signature}";
+
+    const totalRows = Math.ceil(measures.length / measuresPerRow);
+    const totalWidth = leftPad * 2 + measuresPerRow * measureWidth + clefWidth;
+    const totalHeight = topPad + totalRows * rowHeight + 40;
+
     const div = document.getElementById('sheet-music');
     const renderer = new VF.Renderer(div, VF.Renderer.Backends.SVG);
-    renderer.resize(800, 200);
+    renderer.resize(totalWidth, totalHeight);
     const context = renderer.getContext();
 
-    const stave = new VF.Stave(10, 40, 700);
-    stave.addClef('treble').addTimeSignature('{self.config.time_signature}');
-    stave.setContext(context).draw();
+    measures.forEach((measureNotes, idx) => {{
+      const row = Math.floor(idx / measuresPerRow);
+      const col = idx % measuresPerRow;
+      const isFirstInRow = col === 0;
+      const width = isFirstInRow ? measureWidth + clefWidth : measureWidth;
+      const x = leftPad + col * measureWidth + (isFirstInRow ? 0 : clefWidth);
+      const y = topPad + row * rowHeight;
 
-    const notes = [
-{','.join(vex_notes)}
-    ];
+      const stave = new VF.Stave(x, y, width);
+      if (isFirstInRow) {{
+        stave.addClef('treble').addTimeSignature(timeSig);
+      }}
+      stave.setContext(context).draw();
 
-    const voice = new VF.Voice({{num_beats: 4, beat_value: 4}});
-    voice.addTickables(notes);
+      if (measureNotes.length === 0) return;
 
-    const formatter = new VF.Formatter().joinVoices([voice]).format([voice], 600);
-    voice.draw(context, stave);
+      const vfNotes = measureNotes.map(n =>
+        new VF.StaveNote({{clef: 'treble', keys: n.keys, duration: n.duration}})
+      );
+      const voice = new VF.Voice({{num_beats: numBeats, beat_value: beatValue}}).setStrict(false);
+      voice.addTickables(vfNotes);
+      new VF.Formatter()
+        .joinVoices([voice])
+        .format([voice], width - (isFirstInRow ? clefWidth + 20 : 20));
+      voice.draw(context, stave);
+    }});
   </script>
 </body>
 </html>'''
@@ -190,7 +254,7 @@ class SheetGenerator:
 
     def _midi_to_vexflow_key(self, midi_pitch: float) -> str:
         notes = ["c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"]
-        octave = int(midi_pitch // 12) - 4
+        octave = int(midi_pitch // 12) - 1
         note_idx = int(midi_pitch % 12)
         return f"{notes[note_idx]}/{octave}"
 

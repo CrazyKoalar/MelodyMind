@@ -159,6 +159,13 @@ Typical stem values are:
 - `accompaniment`
 - `bass`
 
+> **Tip — Web annotation tool**: editing the CSV by ear is awkward because you
+> can't audition the candidate stems. Instead, run `melonymind-webapp` (see the
+> **Web Annotation Tool** section below) — it lets professional annotators
+> listen to each stem in a browser, pick the right one, optionally correct
+> extracted melody notes on a piano roll, and export a manifest that
+> `melonymind-train-melody-ranker` reads directly.
+
 ### Step 3: Build The Training Manifest
 
 Once review is done:
@@ -265,6 +272,100 @@ python -m melonymind.training.prepare_melody_ranker_data build-manifest ./output
 python -m melonymind.training.train_melody_ranker ./output/melody_manifest.jsonl -o ./output/melody_ranker.json
 ```
 
+## Web Annotation Tool
+
+For musicians or annotators who help tune the melody-ranker model, MelodyMind
+ships a local web app — a friendlier replacement for hand-editing the review
+CSV. It runs entirely on the annotator's machine, reuses the same audio
+pipeline as the CLI, and produces a manifest that
+`melonymind-train-melody-ranker` reads directly.
+
+### What it does
+
+1. **Listen and pick** — for each song, audition the original mix plus the
+   five separated stems (`mix`, `vocals`, `accompaniment`, `bass`,
+   `percussive`) in the browser and click the one carrying the lead melody.
+2. **Correct notes** — open a canvas piano roll on the chosen stem; drag,
+   resize, add or delete notes synced with audio playback to fix the
+   pYIN-extracted melody.
+3. **Export** — one click writes a trainer-ready
+   `melody_manifest.jsonl`, plus a richer `melody_notes_manifest.jsonl` that
+   preserves the corrected note arrays for future note-supervised training.
+
+### Quick start
+
+Install with the runtime deps (the dependencies `fastapi` and `uvicorn` are
+already in `requirements.txt` / `setup.py`):
+
+```bash
+pip install -e .
+melonymind-webapp --dataset ./dataset --state ./output/web_annotation --open
+```
+
+Then in the browser:
+
+1. Click a song → **Prepare stems** (first time only; ~30–60 s per song;
+   cached afterwards).
+2. Listen to each stem, click **Pick** on the right one, then **Confirm**.
+3. Optionally click **Edit melody notes →** to fix the extracted notes on a
+   piano roll (Space = play / pause, click empty cell = add a note, drag to
+   move / resize, Delete to remove, ctrl + wheel = zoom time, shift + wheel
+   = zoom pitch, middle-drag = pan). Edits auto-save 2 s after the last
+   change.
+4. Click **Export manifest** in the top bar — you get the file paths in a
+   toast with a **Reveal in Explorer** button.
+
+### CLI flags
+
+```bash
+melonymind-webapp --dataset PATH --state PATH [options]
+
+  --dataset PATH          Root folder containing audio files (required).
+  --state PATH            Where SQLite + stem cache live (required).
+  --host STR              Bind address. Default 127.0.0.1.
+  --port INT              Default 7860.
+  --sample-rate INT       Default 22050. Must match your trainer.
+  --min-confidence FLOAT  Default 0.55, forwarded to choose_melody_stem.
+  --open                  Open the browser after the server is ready.
+  --allow-remote          Required to bind a non-loopback host. The app has
+                          no authentication; only use on a trusted network.
+```
+
+### Feeding annotations back into training
+
+After exporting, the manifest at `./output/web_annotation/export/melody_manifest.jsonl`
+plugs directly into the existing trainer:
+
+```bash
+melonymind-train-melody-ranker \
+  ./output/web_annotation/export/melody_manifest.jsonl \
+  -o ./output/melody_ranker.json
+```
+
+The richer `melody_notes_manifest.jsonl` next to it is forward-looking —
+today's trainer doesn't read it yet, but the corrected notes are preserved
+for whenever a note-supervised model is added.
+
+### What's cached on disk
+
+Under `--state` you'll find:
+
+```text
+state/
+|-- annotation.sqlite        # per-song status, picks, corrected notes
+|-- songs/<song_hash>/
+|   |-- source_meta.json
+|   |-- stems/*.wav          # 5 separated stems, 22.05 kHz PCM_16 mono
+|   `-- notes/*.json         # extracted/edited notes for each stem
+`-- export/
+    |-- melody_manifest.jsonl
+    |-- melody_notes_manifest.jsonl
+    `-- melody_review.csv
+```
+
+The `song_hash` includes the source file's mtime and size, so editing a song
+in place invalidates the cache automatically.
+
 ## Project Structure
 
 ```text
@@ -284,11 +385,20 @@ MelodyMind/
 |   |-- notation/
 |   |   |-- jianpu_generator.py
 |   |   `-- sheet_generator.py
-|   `-- training/
-|       |-- dataset_prep.py
-|       |-- melody_ranker_trainer.py
-|       |-- prepare_melody_ranker_data.py
-|       `-- train_melody_ranker.py
+|   |-- training/
+|   |   |-- dataset_prep.py
+|   |   |-- melody_ranker_trainer.py
+|   |   |-- prepare_melody_ranker_data.py
+|   |   `-- train_melody_ranker.py
+|   `-- webapp/
+|       |-- cli.py            # melonymind-webapp entry point
+|       |-- server.py         # FastAPI app factory
+|       |-- pipeline.py       # compute_song wrapping AudioProcessor + PitchDetector
+|       |-- state.py          # SQLite state repo
+|       |-- cache.py          # stem WAV + notes JSON disk cache
+|       |-- manifest.py       # trainer-compatible manifest export
+|       |-- routes_songs.py / routes_audio.py / routes_notes.py
+|       `-- static/           # vanilla HTML + JS + Canvas piano roll
 |-- examples/
 |-- tests/
 |-- requirements.txt
