@@ -1,6 +1,7 @@
 // Canvas-based piano roll note editor.
 // Three stacked canvases: bg (grid + keyboard + ruler), notes, overlay (playhead, marquee, ghost).
 
+import { applyDataI18n, t } from './i18n.js';
 import { syncPlayhead } from './audio_sync.js';
 
 const PITCH_MIN_DEFAULT = 36;   // C2
@@ -13,6 +14,19 @@ const GRID_DIV = 16;
 const SNAP_T = SECONDS_PER_BEAT / (GRID_DIV / 4); // 1/16 note in seconds (= 0.125s @ 120 BPM)
 const RESIZE_HANDLE_PX = 6;
 const AUTO_SAVE_MS = 2000;
+const SHEET_BPM_STORAGE_KEY = 'melonymind_sheet_bpm';
+
+function sheetExportBpm() {
+  try {
+    const raw = sessionStorage.getItem(SHEET_BPM_STORAGE_KEY);
+    if (raw == null) return BPM;
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n)) return BPM;
+    return Math.max(40, Math.min(240, Math.round(n)));
+  } catch (_) {
+    return BPM;
+  }
+}
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 function noteName(midi) {
@@ -22,8 +36,21 @@ function isBlackKey(midi) {
   return [1, 3, 6, 8, 10].includes(midi % 12);
 }
 
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[c]);
+}
+
 export async function renderNoteEditor({ songId, view, instantiate, toast, api }) {
-  view.append(instantiate('tpl-note-editor'));
+  const rootFrag = instantiate('tpl-note-editor');
+  view.append(rootFrag);
+  applyDataI18n(view);
+
+  const adminBanner = document.getElementById('ne-admin-banner');
+  if (adminBanner) {
+    adminBanner.innerHTML = t('editor_admin_html');
+  }
 
   const titleEl = document.getElementById('ne-title');
   const playBtn = document.getElementById('ne-play');
@@ -44,14 +71,16 @@ export async function renderNoteEditor({ songId, view, instantiate, toast, api }
   if (!detail.picked_stem) {
     view.innerHTML = `
       <section style="max-width:600px;margin:40px auto;text-align:center;">
-        <h2>No stem picked</h2>
-        <p>Pick a stem first.</p>
-        <p><a href="#/song/${songId}/stem">← stem picker</a></p>
+        <h2>${escapeHtml(t('editor_gate_title'))}</h2>
+        <p>${escapeHtml(t('editor_gate_line1'))}</p>
+        <p><a href="#/song/${songId}/stem">${escapeHtml(t('editor_gate_stem'))}</a> · <a href="#/song/${songId}/sheet">${escapeHtml(t('editor_gate_sheet'))}</a></p>
       </section>`;
     return;
   }
 
   titleEl.textContent = `${detail.relpath} · ${detail.picked_stem}`;
+  const backSheet = document.getElementById('ne-back-sheet');
+  if (backSheet) backSheet.href = `#/song/${songId}/sheet`;
 
   // Fetch notes
   const notesPayload = await api(`/api/songs/${songId}/notes?stem=${encodeURIComponent(detail.picked_stem)}`);
@@ -326,7 +355,7 @@ export async function renderNoteEditor({ songId, view, instantiate, toast, api }
 
   function markDirty() {
     state.dirty = true;
-    statusEl.textContent = 'unsaved…';
+    statusEl.textContent = t('editor_status_unsaved');
     clearTimeout(saveTimer);
     saveTimer = setTimeout(save, AUTO_SAVE_MS);
   }
@@ -335,7 +364,7 @@ export async function renderNoteEditor({ songId, view, instantiate, toast, api }
     if (!state.dirty) return;
     clearTimeout(saveTimer);
     saveTimer = null;
-    statusEl.textContent = 'saving…';
+    statusEl.textContent = t('editor_status_saving');
     try {
       const body = {
         stem: detail.picked_stem,
@@ -345,11 +374,11 @@ export async function renderNoteEditor({ songId, view, instantiate, toast, api }
       };
       await api(`/api/songs/${songId}/notes`, { method: 'PUT', body });
       state.dirty = false;
-      statusEl.textContent = 'saved.';
+      statusEl.textContent = t('editor_status_saved');
       setTimeout(() => { if (!state.dirty) statusEl.textContent = ''; }, 1500);
     } catch (err) {
       statusEl.textContent = '';
-      toast(`Save failed: ${err.message}`, 'error');
+      toast(t('editor_err_save', { msg: err.message }), 'error');
     }
   }
 
@@ -579,7 +608,7 @@ export async function renderNoteEditor({ songId, view, instantiate, toast, api }
     return new URLSearchParams({
       stem: detail.picked_stem,
       title,
-      tempo: String(BPM),
+      tempo: String(sheetExportBpm()),
       time_signature: '4/4',
       key: 'C major',
     });
@@ -611,9 +640,9 @@ export async function renderNoteEditor({ songId, view, instantiate, toast, api }
       a.download = `${base}.ly`;
       a.click();
       URL.revokeObjectURL(a.href);
-      toast('Downloaded .ly file.', 'success', 2500);
+      toast(t('editor_toast_sheet_ok'), 'success', 2500);
     } catch (err) {
-      toast(`Sheet export failed: ${err.message}`, 'error');
+      toast(t('editor_err_sheet', { msg: err.message }), 'error');
     }
   });
 
@@ -624,12 +653,12 @@ export async function renderNoteEditor({ songId, view, instantiate, toast, api }
       params.set('sheet_format', 'html');
       window.open(`/api/songs/${songId}/sheet?${params}`, '_blank', 'noopener,noreferrer');
     } catch (err) {
-      toast(`Preview failed: ${err.message}`, 'error');
+      toast(t('editor_err_preview', { msg: err.message }), 'error');
     }
   });
 
   reextractBtn.addEventListener('click', async () => {
-    if (state.dirty && !confirm('You have unsaved edits. Discard and re-extract?')) return;
+    if (state.dirty && !confirm(t('editor_reextract_confirm'))) return;
     try {
       const res = await api(`/api/songs/${songId}/notes/reextract`, {
         method: 'POST', body: { stem: detail.picked_stem },
@@ -645,9 +674,9 @@ export async function renderNoteEditor({ songId, view, instantiate, toast, api }
       state.selected.clear();
       state.dirty = false;
       draw();
-      toast('Re-extracted notes.', 'success', 1800);
+      toast(t('editor_toast_reextracted'), 'success', 1800);
     } catch (err) {
-      toast(`Re-extract failed: ${err.message}`, 'error');
+      toast(t('editor_err_reextract', { msg: err.message }), 'error');
     }
   });
 

@@ -1,18 +1,25 @@
 """
-Pitch detection using various methods including Basic Pitch.
+Pitch detection using librosa pYIN (default), optional Basic Pitch, legacy spectral peak.
 """
 
 import numpy as np
-from typing import List, Tuple, Optional
+import librosa
+from typing import List, Optional
 from dataclasses import dataclass
 from enum import Enum
 
 
 class DetectionMode(Enum):
     """Available pitch detection modes."""
+
+    PYIN = "pyin"
+    """Probabilistic YIN via librosa — best default for monophonic vocal/instrument stems."""
+
+    SPECTRAL_PEAK = "spectral_peak"
+    """Fast FFT-peak tracker; rougher than pYIN, kept for debugging."""
+
     BASIC_PITCH = "basic_pitch"
     CREPE = "crepe"
-    PYIN = "pyin"
 
 
 @dataclass
@@ -39,8 +46,8 @@ class NoteEvent:
 
 class PitchDetector:
     """Detect pitch from audio using multiple backends."""
-    
-    def __init__(self, mode: DetectionMode = DetectionMode.BASIC_PITCH):
+
+    def __init__(self, mode: DetectionMode = DetectionMode.PYIN):
         """
         Initialize pitch detector.
         
@@ -84,10 +91,11 @@ class PitchDetector:
         """
         if self.mode == DetectionMode.BASIC_PITCH:
             return self._detect_basic_pitch(audio, sr, min_confidence)
-        elif self.mode == DetectionMode.PYIN:
+        if self.mode == DetectionMode.PYIN:
             return self._detect_pyin(audio, sr, min_confidence)
-        else:
-            raise NotImplementedError(f"Mode {self.mode} not implemented")
+        if self.mode == DetectionMode.SPECTRAL_PEAK:
+            return self._detect_spectral_peak(audio, sr, min_confidence)
+        raise NotImplementedError(f"Mode {self.mode} not implemented")
     
     def _detect_basic_pitch(
         self, 
@@ -108,12 +116,109 @@ class PitchDetector:
         return []
     
     def _detect_pyin(
-        self, 
-        audio: np.ndarray, 
+        self,
+        audio: np.ndarray,
         sr: int,
-        min_confidence: float
+        min_confidence: float,
     ) -> List[NoteEvent]:
-        """Detect pitch with a lightweight frame-wise spectral peak tracker."""
+        """Monophonic F0 with librosa.pyin (probabilistic YIN)."""
+        y = np.asarray(audio, dtype=float)
+        if y.ndim > 1:
+            y = np.mean(y, axis=1)
+        if y.size == 0:
+            return []
+
+        frame_length = 2048
+        hop_length = 512
+        if y.size < frame_length:
+            return []
+
+        fmin = float(librosa.note_to_hz("C2"))
+        fmax = float(librosa.note_to_hz("C7"))
+        f0_hz, voiced_flag, voiced_probs = librosa.pyin(
+            y,
+            fmin=fmin,
+            fmax=fmax,
+            sr=sr,
+            frame_length=frame_length,
+            hop_length=hop_length,
+        )
+        times = librosa.frames_to_time(
+            np.arange(len(f0_hz)), sr=sr, hop_length=hop_length
+        )
+        hop_sec = hop_length / float(sr)
+
+        notes: List[NoteEvent] = []
+        current_midi: Optional[float] = None
+        note_start = 0.0
+        note_conf_sum = 0.0
+        note_conf_n = 0
+
+        def flush_note(end_t: float, last_conf: float) -> None:
+            nonlocal current_midi, note_conf_sum, note_conf_n
+            if current_midi is None or end_t <= note_start:
+                return
+            conf = (
+                float(note_conf_sum / max(note_conf_n, 1))
+                if note_conf_n
+                else last_conf
+            )
+            notes.append(
+                NoteEvent(
+                    pitch=current_midi,
+                    start_time=note_start,
+                    end_time=end_t,
+                    confidence=conf,
+                )
+            )
+            current_midi = None
+            note_conf_sum = 0.0
+            note_conf_n = 0
+
+        for t, hz, vflag, vprob in zip(times, f0_hz, voiced_flag, voiced_probs):
+            conf = float(vprob) if vprob is not None and np.isfinite(vprob) else 0.0
+            voiced = bool(vflag) and conf >= min_confidence and hz is not None and np.isfinite(hz) and hz > 0
+
+            if not voiced:
+                flush_note(t, conf)
+                continue
+
+            midi_pitch = float(69.0 + 12.0 * np.log2(float(hz) / 440.0))
+
+            if current_midi is None:
+                current_midi = midi_pitch
+                note_start = t
+                note_conf_sum = conf
+                note_conf_n = 1
+            elif abs(midi_pitch - current_midi) > 0.5:
+                flush_note(t, conf)
+                current_midi = midi_pitch
+                note_start = t
+                note_conf_sum = conf
+                note_conf_n = 1
+            else:
+                note_conf_sum += conf
+                note_conf_n += 1
+
+        if current_midi is not None and times.size > 0:
+            notes.append(
+                NoteEvent(
+                    pitch=current_midi,
+                    start_time=note_start,
+                    end_time=float(times[-1]) + hop_sec,
+                    confidence=float(note_conf_sum / max(note_conf_n, 1)),
+                )
+            )
+
+        return notes
+
+    def _detect_spectral_peak(
+        self,
+        audio: np.ndarray,
+        sr: int,
+        min_confidence: float,
+    ) -> List[NoteEvent]:
+        """Legacy frame-wise spectral peak tracker."""
         frame_length = 2048
         hop_length = 512
         if len(audio) < frame_length:
@@ -168,21 +273,20 @@ class PitchDetector:
 
         notes = []
 
-        # Convert continuous pitch to note events
         current_note = None
         note_start = 0
 
-        for i, (time, pitch, is_voiced, conf) in enumerate(
-            zip(times, f0, voiced_flag, voiced_probs)
-        ):
+        for time, pitch, is_voiced, conf in zip(times, f0, voiced_flag, voiced_probs):
             if not is_voiced or conf < min_confidence:
                 if current_note is not None:
-                    notes.append(NoteEvent(
-                        pitch=current_note,
-                        start_time=note_start,
-                        end_time=time,
-                        confidence=conf
-                    ))
+                    notes.append(
+                        NoteEvent(
+                            pitch=current_note,
+                            start_time=note_start,
+                            end_time=time,
+                            confidence=conf,
+                        )
+                    )
                     current_note = None
                 continue
 
@@ -191,24 +295,27 @@ class PitchDetector:
             if current_note is None:
                 current_note = midi_pitch
                 note_start = time
-            elif abs(midi_pitch - current_note) > 0.5:  # Pitch changed
-                notes.append(NoteEvent(
-                    pitch=current_note,
-                    start_time=note_start,
-                    end_time=time,
-                    confidence=conf
-                ))
+            elif abs(midi_pitch - current_note) > 0.5:
+                notes.append(
+                    NoteEvent(
+                        pitch=current_note,
+                        start_time=note_start,
+                        end_time=time,
+                        confidence=conf,
+                    )
+                )
                 current_note = midi_pitch
                 note_start = time
 
-        # Close final note
         if current_note is not None and len(times) > 0:
-            notes.append(NoteEvent(
-                pitch=current_note,
-                start_time=note_start,
-                end_time=times[-1] + hop_length / sr,
-                confidence=voiced_probs[-1]
-            ))
+            notes.append(
+                NoteEvent(
+                    pitch=current_note,
+                    start_time=note_start,
+                    end_time=times[-1] + hop_length / sr,
+                    confidence=voiced_probs[-1],
+                )
+            )
 
         return notes
     

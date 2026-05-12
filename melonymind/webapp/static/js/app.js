@@ -1,7 +1,17 @@
 // MelodyMind annotation tool — top-level router and shared utilities.
 
+import {
+  applyDataI18n,
+  initI18nShell,
+  subscribeLocale,
+  syncDocumentTitle,
+  t,
+  tStatus,
+  updateLangSwitcher,
+} from './i18n.js';
 import { renderStemPicker } from './stem_picker.js';
 import { renderNoteEditor } from './piano_roll.js';
+import { renderSheetView } from './sheet_view.js';
 
 const view = document.getElementById('view');
 const navContext = document.getElementById('nav-context');
@@ -72,6 +82,7 @@ async function renderSongList() {
 
   const frag = instantiate('tpl-song-list');
   view.append(frag);
+  applyDataI18n(view);
 
   const filterInput = document.getElementById('filter');
   const tbody = document.getElementById('rows');
@@ -85,7 +96,7 @@ async function renderSongList() {
     const payload = await api('/api/songs');
     songs = payload.songs;
   } catch (err) {
-    toast(`Could not list songs: ${err.message}`, 'error', 6000);
+    toast(t('err_list_songs', { msg: err.message }), 'error', 6000);
     return;
   }
 
@@ -98,10 +109,10 @@ async function renderSongList() {
       tr.dataset.id = song.id;
       tr.innerHTML = `
         <td>${escapeHtml(song.filename)}</td>
-        <td><span class="badge ${song.status}">${song.status}</span></td>
+        <td><span class="badge ${song.status}">${escapeHtml(tStatus(song.status))}</span></td>
         <td>${song.picked_stem ? escapeHtml(song.picked_stem) : '<span class="muted">—</span>'}</td>
         <td>${fmtDuration(song.duration_sec)}</td>
-        <td><button class="open">Open →</button></td>
+        <td><button class="open">${escapeHtml(t('list_open'))}</button></td>
       `;
       tr.querySelector('.open').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -115,7 +126,11 @@ async function renderSongList() {
 
     const total = songs.length;
     const confirmed = songs.filter(s => s.status === 'confirmed').length;
-    counts.textContent = `${filtered.length} shown · ${confirmed} confirmed / ${total} total`;
+    counts.textContent = t('list_counts', {
+      shown: String(filtered.length),
+      confirmed: String(confirmed),
+      total: String(total),
+    });
   }
 
   filterInput.addEventListener('input', paint);
@@ -125,7 +140,7 @@ async function renderSongList() {
     const file = fileInput.files?.[0];
     if (!file) return;
     uploadStatus.hidden = false;
-    uploadStatus.textContent = 'Uploading…';
+    uploadStatus.textContent = t('list_uploading');
     const fd = new FormData();
     fd.append('file', file);
     fd.append('auto_compute', autoComputeEl.checked ? 'true' : 'false');
@@ -144,13 +159,13 @@ async function renderSongList() {
       uploadStatus.hidden = true;
       const ran = data.compute && !data.compute.cached;
       toast(
-        ran ? 'Uploaded and analyzed. Opening stem picker…' : 'Uploaded. Opening stem picker…',
+        ran ? t('toast_upload_analyzed') : t('toast_upload_open'),
         'success',
       );
       location.hash = `#/song/${data.song.id}/stem`;
     } catch (err) {
       uploadStatus.textContent = err.message;
-      toast(`Upload failed: ${err.message}`, 'error', 6000);
+      toast(t('err_upload', { msg: err.message }), 'error', 6000);
     } finally {
       fileInput.value = '';
     }
@@ -168,28 +183,41 @@ function escapeHtml(s) {
 async function route() {
   const hash = location.hash || '#/';
   const stemMatch = hash.match(/^#\/song\/([^/]+)\/stem$/);
+  const sheetMatch = hash.match(/^#\/song\/([^/]+)\/sheet$/);
   const notesMatch = hash.match(/^#\/song\/([^/]+)\/notes$/);
 
   if (stemMatch) {
     const songId = stemMatch[1];
-    setNavContext('stem picker', `#/song/${songId}/stem`);
+    setNavContext(t('nav_stem_picker'), `#/song/${songId}/stem`);
     clearView();
     try {
       await renderStemPicker({ songId, view, instantiate, toast, api });
     } catch (err) {
-      toast(`Failed to load song: ${err.message}`, 'error', 6000);
+      toast(t('err_load_song', { msg: err.message }), 'error', 6000);
+    }
+    return;
+  }
+
+  if (sheetMatch) {
+    const songId = sheetMatch[1];
+    setNavContext(t('nav_sheet_music'), `#/song/${songId}/sheet`);
+    clearView();
+    try {
+      await renderSheetView({ songId, view, instantiate, toast });
+    } catch (err) {
+      toast(t('err_sheet_view', { msg: err.message }), 'error', 6000);
     }
     return;
   }
 
   if (notesMatch) {
     const songId = notesMatch[1];
-    setNavContext('note editor', `#/song/${songId}/notes`);
+    setNavContext(t('nav_admin_editor'), `#/song/${songId}/notes`);
     clearView();
     try {
       await renderNoteEditor({ songId, view, instantiate, toast, api });
     } catch (err) {
-      toast(`Failed to load editor: ${err.message}`, 'error', 6000);
+      toast(t('err_editor', { msg: err.message }), 'error', 6000);
     }
     return;
   }
@@ -197,8 +225,22 @@ async function route() {
   await renderSongList();
 }
 
+function refreshChromeI18n() {
+  syncDocumentTitle();
+  updateLangSwitcher();
+  applyDataI18n(document.querySelector('header') || document);
+}
+
+subscribeLocale(() => {
+  refreshChromeI18n();
+  route();
+});
+
 window.addEventListener('hashchange', route);
-window.addEventListener('DOMContentLoaded', route);
+window.addEventListener('DOMContentLoaded', () => {
+  initI18nShell();
+  route();
+});
 
 // ---------- export button ----------
 
@@ -209,27 +251,31 @@ exportBtn.addEventListener('click', async () => {
       method: 'POST',
       body: { only_confirmed: true },
     });
-    const msg = `Exported ${result.count} song(s).\nManifest: ${result.melody_manifest}\nNotes:    ${result.notes_manifest}\nReview:   ${result.review_csv}`;
+    const msg = t('export_body', {
+      count: String(result.count),
+      melody: result.melody_manifest,
+      notes: result.notes_manifest,
+      review: result.review_csv,
+    });
     toast(msg, 'success', 12000);
 
-    // Replace the toast plain text with a richer node carrying a Reveal button
     toastEl.textContent = '';
     const pre = document.createElement('pre');
     pre.style.cssText = 'margin:0 0 8px 0; white-space:pre-wrap; font: 12px ui-monospace, monospace;';
     pre.textContent = msg;
     toastEl.append(pre);
     const reveal = document.createElement('button');
-    reveal.textContent = 'Reveal in Explorer';
+    reveal.textContent = t('export_reveal');
     reveal.addEventListener('click', async () => {
       try {
         await api('/api/reveal', { method: 'POST', body: { path: result.melody_manifest } });
       } catch (err) {
-        toast(`Reveal failed: ${err.message}`, 'error');
+        toast(t('err_reveal', { msg: err.message }), 'error');
       }
     });
     toastEl.append(reveal);
   } catch (err) {
-    toast(`Export failed: ${err.message}`, 'error', 6000);
+    toast(t('err_export', { msg: err.message }), 'error', 6000);
   } finally {
     exportBtn.disabled = false;
   }

@@ -8,13 +8,18 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>MelodyMind Annotation</h1>
+    <h1 id="app-title" data-i18n="app_title">MelodyMind Annotation</h1>
     <nav id="nav">
-      <a href="#/" id="nav-list">Songs</a>
+      <a href="#/" id="nav-list" data-i18n="nav_songs">Songs</a>
       <span id="nav-context"></span>
     </nav>
     <div class="topbar-actions">
-      <button id="btn-export" type="button" title="Export training manifest from confirmed songs">Export manifest</button>
+      <div class="lang-switch" role="group" aria-label="Language">
+        <span class="lang-label muted" data-i18n="lang_label">Language</span>
+        <button type="button" id="lang-en" class="lang-btn" data-locale="en" data-i18n="lang_en" aria-pressed="true">EN</button>
+        <button type="button" id="lang-zh" class="lang-btn" data-locale="zh" data-i18n="lang_zh" aria-pressed="false">中文</button>
+      </div>
+      <button id="btn-export" type="button" data-i18n="export_manifest" data-i18n-title="export_manifest_title">Export manifest</button>
     </div>
   </header>
 
@@ -25,27 +30,27 @@
   <template id="tpl-song-list">
     <section class="song-list">
       <div class="upload-card" id="upload-card">
-        <label class="upload-label" for="file-upload">Upload audio</label>
+        <label class="upload-label" for="file-upload" data-i18n="list_upload_label">Upload audio</label>
         <input type="file" id="file-upload" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*" hidden>
-        <p class="muted upload-hint">WAV, MP3, FLAC, OGG, M4A — saved to dataset/uploads</p>
+        <p class="muted upload-hint" data-i18n="list_upload_hint">WAV, MP3, FLAC, OGG, M4A — saved to dataset/uploads</p>
         <label class="upload-row">
           <input type="checkbox" id="auto-compute" checked>
-          <span>Run recognition after upload (stems + pitch, may take 30–60s)</span>
+          <span data-i18n="list_auto_compute">Run recognition after upload (stems + pitch, may take 30–60s)</span>
         </label>
         <p id="upload-status" class="muted" hidden></p>
       </div>
       <div class="toolbar">
-        <input id="filter" type="search" placeholder="Filter by filename…">
+        <input id="filter" type="search" data-i18n-placeholder="list_filter_ph" placeholder="Filter by filename…">
         <span class="counts" id="counts"></span>
       </div>
       <table>
         <thead>
           <tr>
-            <th>File</th>
-            <th>Status</th>
-            <th>Picked stem</th>
-            <th>Duration</th>
-            <th></th>
+            <th data-i18n="list_col_file">File</th>
+            <th data-i18n="list_col_status">Status</th>
+            <th data-i18n="list_col_stem">Picked stem</th>
+            <th data-i18n="list_col_duration">Duration</th>
+            <th data-i18n="list_col_action"></th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
@@ -58,7 +63,7 @@
       <div class="picker-header">
         <h2 id="sp-title"></h2>
         <div id="sp-prep" class="prep-block" hidden>
-          <button id="sp-prepare" type="button">Prepare stems (first time, ~30s)</button>
+          <button id="sp-prepare" type="button" data-i18n="stem_prepare">Prepare stems (first time, ~30s)</button>
           <span id="sp-prep-msg" class="muted"></span>
         </div>
       </div>
@@ -66,36 +71,65 @@
       <ol id="sp-list" class="stem-list"></ol>
 
       <div class="picker-actions">
-        <button id="sp-confirm" type="button" disabled>Confirm and continue</button>
-        <button id="sp-edit-notes" type="button" disabled>Edit melody notes →</button>
-        <button id="sp-reopen" type="button" hidden>Reopen for editing</button>
+        <button id="sp-to-sheet" type="button" class="primary" disabled data-i18n="stem_to_sheet">Continue to sheet music →</button>
+        <button id="sp-confirm" type="button" disabled data-i18n="stem_confirm_export">Confirm for training export</button>
+        <button id="sp-reopen" type="button" hidden data-i18n="stem_reopen">Reopen for editing</button>
       </div>
+      <p class="admin-entry muted">
+        <a id="sp-admin-notes" href="#" data-i18n="stem_admin_link">Refine pitch detection (admin) →</a>
+      </p>
     </section>
   </template>
 
   <template id="tpl-stem-row">
     <li class="stem-row" data-stem="">
-      <button class="stem-pick" type="button">Pick</button>
+      <button class="stem-pick" type="button" data-i18n="stem_pick">Pick</button>
       <span class="stem-name"></span>
       <span class="stem-score muted"></span>
       <audio controls preload="metadata"></audio>
     </li>
   </template>
 
+  <template id="tpl-sheet-view">
+    <section class="sheet-view">
+      <div class="sheet-header">
+        <h2 id="sv-title"></h2>
+        <p id="sv-stem" class="muted"></p>
+        <p class="sheet-lead" data-i18n="sheet_lead">
+          Open a browser preview or download LilyPond source. Notation uses the notes detected on the stem you picked (same as the training pipeline’s pitch step). Set BPM to match the song so note lengths map sensibly.
+        </p>
+        <div class="sheet-bpm-row">
+          <label for="sv-tempo" data-i18n="sheet_tempo_label">Tempo (BPM)</label>
+          <input type="number" id="sv-tempo" min="40" max="240" step="1" value="120">
+        </div>
+        <div class="sheet-actions">
+          <button id="sv-preview" type="button" class="primary" data-i18n="sheet_preview">Open sheet preview (new tab)</button>
+          <button id="sv-ly" type="button" data-i18n="sheet_dl_ly">Download .ly</button>
+        </div>
+        <p class="sheet-nav-links">
+          <a id="sv-back-stem" href="#" data-i18n="sheet_back_stem">← Change stem</a>
+          <span class="muted"> · </span>
+          <a id="sv-admin-notes" href="#" data-i18n="sheet_admin">Refine detection (admin) →</a>
+        </p>
+      </div>
+    </section>
+  </template>
+
   <template id="tpl-note-editor">
     <section class="note-editor">
+      <p class="admin-banner" id="ne-admin-banner"></p>
       <div class="editor-header">
         <h2 id="ne-title"></h2>
         <div class="editor-controls">
-          <button id="ne-play" type="button">▶ Play</button>
-          <button id="ne-stop" type="button">■ Stop</button>
+          <button id="ne-play" type="button" data-i18n="editor_play">▶ Play</button>
+          <button id="ne-stop" type="button" data-i18n="editor_stop">■ Stop</button>
           <span id="ne-time" class="muted">0.00 / 0.00 s</span>
           <span id="ne-status" class="muted"></span>
-          <button id="ne-save" type="button" title="Force save">Save now</button>
-          <button id="ne-reextract" type="button" title="Re-run pYIN on this stem">Re-extract</button>
+          <button id="ne-save" type="button" data-i18n="editor_save" data-i18n-title="editor_save_title">Save now</button>
+          <button id="ne-reextract" type="button" data-i18n="editor_reextract" data-i18n-title="editor_reextract_title">Re-extract</button>
           <span class="editor-sep" aria-hidden="true"></span>
-          <button id="ne-sheet-ly" type="button" title="Download LilyPond source">Download .ly</button>
-          <button id="ne-sheet-html" type="button" title="Open VexFlow preview in a new tab">Sheet preview</button>
+          <button id="ne-sheet-ly" type="button" data-i18n="editor_sheet_ly" data-i18n-title="editor_sheet_ly_title">Download .ly</button>
+          <button id="ne-sheet-html" type="button" data-i18n="editor_sheet_preview" data-i18n-title="editor_sheet_preview_title">Sheet preview</button>
         </div>
       </div>
 
@@ -105,7 +139,7 @@
         <canvas id="pr-overlay"></canvas>
       </div>
 
-      <p class="hint muted">
+      <p class="hint muted" id="ne-hint" data-i18n="editor_hint">
         Click empty cell to add a note · drag note body to move · drag edges to resize ·
         Delete to remove selected · ctrl+wheel = zoom time · shift+wheel = zoom pitch ·
         middle-drag = pan · Alt disables time snap · click time ruler to seek · Space to play

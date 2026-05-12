@@ -2,6 +2,7 @@
 Tests for pitch detection module.
 """
 
+import numpy as np
 import pytest
 
 from melonymind.core.pitch_detector import DetectionMode, NoteEvent, PitchDetector
@@ -27,6 +28,19 @@ class TestPitchDetector:
         """Test detector can be initialized."""
         detector = PitchDetector(mode=DetectionMode.PYIN)
         assert detector.mode == DetectionMode.PYIN
+
+    def test_default_mode_is_pyin(self):
+        assert PitchDetector().mode == DetectionMode.PYIN
+
+    def test_pyin_detects_sine_440(self):
+        """librosa pYIN should track a steady 440 Hz tone."""
+        sr = 22050
+        t = np.linspace(0.0, 1.5, int(sr * 1.5), endpoint=False)
+        audio = 0.5 * np.sin(2 * np.pi * 440.0 * t).astype(np.float32)
+        detector = PitchDetector(mode=DetectionMode.PYIN)
+        notes = detector.detect(audio, sr, min_confidence=0.15)
+        assert len(notes) >= 1
+        assert abs(notes[0].pitch - 69.0) < 1.5
 
     def test_detect_raises_for_unimplemented_mode(self):
         """CREPE mode should clearly report that it is not implemented yet."""
